@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>བོད་ཡིག་གསལ་བྱེད་རྩེད་མོ། - 藏文辅音游戏</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tibetan:wght@400;700&display=swap');
+        
+        .tibetan-font {
+            font-family: 'Noto Sans Tibetan', 'Microsoft Himalaya', sans-serif;
+        }
+        
+        .cell {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        
+        .cell.highlighted {
+            animation: pulse 0.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+        
+        @keyframes pop {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        
+        .cell.popping {
+            animation: pop 0.3s forwards;
+        }
+        
+        @keyframes fall {
+            from { transform: translateY(-100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .cell.falling {
+            animation: fall 0.3s ease-out;
+        }
+        
+        .star-mode .cell { text-shadow: 0 0 10px currentColor; }
+        .candy-mode .cell { border-radius: 30%; }
+        .fruit-mode .cell { border-radius: 50%; }
+        
+        .mode-btn {
+            transition: all 0.3s ease;
+        }
+        
+        .mode-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .mode-btn.active {
+            ring: 4px;
+            transform: scale(1.05);
+        }
+        
+        .game-board {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        
+        .score-display {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
+    <div class="max-w-2xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-white mb-2 tibetan-font">
+                བོད་ཡིག་གསལ་བྱེད་རྩེད་མོ།
+            </h1>
+            <p class="text-purple-300">藏文辅音游戏 - 三合一消消乐</p>
+        </div>
+        
+        <!-- Mode Selection -->
+        <div class="flex flex-wrap justify-center gap-3 mb-6">
+            <button onclick="setMode('star')" id="btn-star" 
+                class="mode-btn px-6 py-3 rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold shadow-lg active">
+                <span class="text-2xl">⭐</span>
+                <span class="block text-sm tibetan-font">སྐར་མ་སེལ་བ།</span>
+                <span class="block text-xs">消灭星星</span>
+            </button>
+            <button onclick="setMode('candy')" id="btn-candy"
+                class="mode-btn px-6 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-rose-500 text-white font-bold shadow-lg">
+                <span class="text-2xl">🍬</span>
+                <span class="block text-sm tibetan-font">ཀ་ར་དཔེ་གཞི།</span>
+                <span class="block text-xs">糖果模式</span>
+            </button>
+            <button onclick="setMode('fruit')" id="btn-fruit"
+                class="mode-btn px-6 py-3 rounded-xl bg-gradient-to-r from-green-400 to-emerald-500 text-white font-bold shadow-lg">
+                <span class="text-2xl">🍎</span>
+                <span class="block text-sm tibetan-font">ཤིང་ཏོག་དཔེ་གཞི།</span>
+                <span class="block text-xs">水果模式</span>
+            </button>
+        </div>
+        
+        <!-- Score Panel -->
+        <div class="flex justify-between items-center bg-white/10 backdrop-blur rounded-xl p-4 mb-4">
+            <div class="text-center">
+                <p class="text-purple-300 text-sm">得分 / ཨང་གྲངས།</p>
+                <p id="score" class="text-3xl font-bold text-white">0</p>
+            </div>
+            <div class="text-center">
+                <p class="text-purple-300 text-sm">目标 / དམིགས་ཡུལ།</p>
+                <p id="target" class="text-3xl font-bold text-yellow-400">1000</p>
+            </div>
+            <div class="text-center">
+                <p class="text-purple-300 text-sm">关卡 / རིམ་པ།</p>
+                <p id="level" class="text-3xl font-bold text-green-400">1</p>
+            </div>
+            <button onclick="restartGame()" 
+                class="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg text-white font-bold hover:opacity-90">
+                重新开始
+            </button>
+        </div>
+        
+        <!-- Current Letters Legend -->
+        <div class="text-center mb-2">
+            <span class="text-purple-300 text-sm mr-2">འདིའི་རིམ་པའི་ཡི་གེ། / 本关字母:</span>
+            <span id="legend" class="inline-flex gap-2 tibetan-font"></span>
+        </div>
+        
+        <!-- Hint -->
+        <div id="hint" class="text-center text-yellow-300 mb-2 h-6 tibetan-font"></div>
+        
+        <!-- Game Board -->
+        <div id="game-board" class="game-board rounded-2xl p-3 shadow-2xl star-mode">
+            <div id="grid" class="grid gap-1" style="grid-template-columns: repeat(10, 1fr);">
+            </div>
+        </div>
+        
+        <!-- Tibetan Letters Reference -->
+        <div class="mt-6 bg-white/10 backdrop-blur rounded-xl p-4">
+            <h3 class="text-white font-bold mb-2 text-center tibetan-font">གསལ་བྱེད་སུམ་ཅུ། (三十辅音字母) - ནན་ན་སྒྲ་གྲགས། 点击听发音</h3>
+            <div id="letter-reference" class="flex flex-wrap justify-center gap-3 text-4xl tibetan-font text-purple-200">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Level Complete Modal -->
+    <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
+        <div class="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-2xl p-8 text-center max-w-sm mx-4">
+            <h2 id="modal-title" class="text-3xl font-bold text-white mb-4 tibetan-font"></h2>
+            <p id="modal-message" class="text-purple-200 mb-6"></p>
+            <button onclick="nextAction()" id="modal-btn"
+                class="px-8 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-xl text-white font-bold text-lg hover:opacity-90">
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Tibetan 30 consonants with pronunciation
+        const tibetanLetters = [
+            'ཀ', 'ཁ', 'ག', 'ང', 'ཅ', 'ཆ', 'ཇ', 'ཉ', 'ཏ', 'ཐ',
+            'ད', 'ན', 'པ', 'ཕ', 'བ', 'མ', 'ཙ', 'ཚ', 'ཛ', 'ཝ',
+            'ཞ', 'ཟ', 'འ', 'ཡ', 'ར', 'ལ', 'ཤ', 'ས', 'ཧ', 'ཨ'
+        ];
+        
+        // Pronunciation for each letter (Wylie transliteration)
+        const letterPronunciation = {
+            'ཀ': 'ka', 'ཁ': 'kha', 'ག': 'ga', 'ང': 'nga',
+            'ཅ': 'ca', 'ཆ': 'cha', 'ཇ': 'ja', 'ཉ': 'nya',
+            'ཏ': 'ta', 'ཐ': 'tha', 'ད': 'da', 'ན': 'na',
+            'པ': 'pa', 'ཕ': 'pha', 'བ': 'ba', 'མ': 'ma',
+            'ཙ': 'tsa', 'ཚ': 'tsha', 'ཛ': 'dza', 'ཝ': 'wa',
+            'ཞ': 'zha', 'ཟ': 'za', 'འ': 'a', 'ཡ': 'ya',
+            'ར': 'ra', 'ལ': 'la', 'ཤ': 'sha', 'ས': 'sa',
+            'ཧ': 'ha', 'ཨ': 'a'
+        };
+        
+        // Audio context for sound generation
+        let audioContext = null;
+        
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        
+        function playLetterSound(letter) {
+            initAudio();
+            if (!audioContext) return;
+            
+            // Get letter index to create unique pitch
+            const index = tibetanLetters.indexOf(letter);
+            const baseFreq = 261.63; // C4
+            const freq = baseFreq * Math.pow(2, index / 12); // Create musical scale
+            
+            const oscillator = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            
+            oscillator2.type = 'triangle';
+            oscillator2.frequency.setValueAtTime(freq * 2, audioContext.currentTime);
+            
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.4);
+            oscillator2.start(audioContext.currentTime);
+            oscillator2.stop(audioContext.currentTime + 0.4);
+            
+            // Show pronunciation
+            showPronunciation(letter);
+        }
+        
+        // Play pop sound effect when eliminating
+        function playPopSound() {
+            initAudio();
+            if (!audioContext) return;
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.15);
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.15);
+        }
+        
+        function showPronunciation(letter) {
+            const hint = document.getElementById('hint');
+            const pron = letterPronunciation[letter] || '';
+            hint.innerHTML = `<span class="text-2xl">${letter}</span> <span class="text-yellow-400">[ ${pron} ]</span>`;
+            setTimeout(() => {
+                if (hint.innerHTML.includes(letter)) {
+                    hint.textContent = '';
+                }
+            }, 1500);
+        }
+        
+        const ROWS = 10;
+        const COLS = 10;
+        const NUM_TYPES = 5;
+        
+        // Each type has a fixed letter - will be randomized each game
+        let typeLetters = [];
+        
+        let grid = [];
+        let score = 0;
+        let level = 1;
+        let targetScore = 1000;
+        let currentMode = 'star';
+        let isAnimating = false;
+        let gameOver = false;
+        
+        const modeColors = {
+            star: [
+                { bg: 'bg-yellow-400', text: 'text-yellow-900', border: 'border-yellow-300' },
+                { bg: 'bg-red-500', text: 'text-red-100', border: 'border-red-400' },
+                { bg: 'bg-blue-500', text: 'text-blue-100', border: 'border-blue-400' },
+                { bg: 'bg-green-500', text: 'text-green-100', border: 'border-green-400' },
+                { bg: 'bg-purple-500', text: 'text-purple-100', border: 'border-purple-400' }
+            ],
+            candy: [
+                { bg: 'bg-pink-400', text: 'text-pink-900', border: 'border-pink-300' },
+                { bg: 'bg-cyan-400', text: 'text-cyan-900', border: 'border-cyan-300' },
+                { bg: 'bg-orange-400', text: 'text-orange-900', border: 'border-orange-300' },
+                { bg: 'bg-lime-400', text: 'text-lime-900', border: 'border-lime-300' },
+                { bg: 'bg-violet-400', text: 'text-violet-900', border: 'border-violet-300' }
+            ],
+            fruit: [
+                { bg: 'bg-red-400', text: 'text-red-900', border: 'border-red-300' },
+                { bg: 'bg-yellow-300', text: 'text-yellow-900', border: 'border-yellow-200' },
+                { bg: 'bg-green-400', text: 'text-green-900', border: 'border-green-300' },
+                { bg: 'bg-orange-300', text: 'text-orange-900', border: 'border-orange-200' },
+                { bg: 'bg-purple-400', text: 'text-purple-900', border: 'border-purple-300' }
+            ]
+        };
+        
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active', 'ring-4', 'ring-white'));
+            document.getElementById(`btn-${mode}`).classList.add('active', 'ring-4', 'ring-white');
+            
+            const board = document.getElementById('game-board');
+            board.classList.remove('star-mode', 'candy-mode', 'fruit-mode');
+            board.classList.add(`${mode}-mode`);
+            
+            restartGame();
+            updateLegend();
+        }
+        
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        function initGame() {
+            // Assign random letters to each type (5 different letters for 5 types)
+            const shuffledLetters = shuffleArray(tibetanLetters);
+            typeLetters = shuffledLetters.slice(0, NUM_TYPES);
+            
+            grid = [];
+            for (let row = 0; row < ROWS; row++) {
+                grid[row] = [];
+                for (let col = 0; col < COLS; col++) {
+                    const type = Math.floor(Math.random() * NUM_TYPES);
+                    grid[row][col] = {
+                        type: type,
+                        letter: typeLetters[type]  // Same type = same letter
+                    };
+                }
+            }
+            renderGrid();
+            updateLegend();
+        }
+        
+        function updateLegend() {
+            const legendEl = document.getElementById('legend');
+            if (legendEl) {
+                legendEl.innerHTML = typeLetters.map((letter, i) => {
+                    const colors = modeColors[currentMode][i];
+                    const pron = letterPronunciation[letter];
+                    return `<span onclick="playLetterSound('${letter}')" 
+                        class="${colors.bg} ${colors.text} px-3 py-1 rounded-lg text-xl cursor-pointer hover:scale-110 transition-transform"
+                        title="${pron}">${letter}</span>`;
+                }).join('');
+            }
+        }
+        
+        function renderGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.innerHTML = '';
+            
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const cell = document.createElement('div');
+                    const cellData = grid[row][col];
+                    
+                    if (cellData) {
+                        const colors = modeColors[currentMode][cellData.type];
+                        cell.className = `cell ${colors.bg} ${colors.text} border-2 ${colors.border} 
+                            w-full aspect-square rounded-lg flex items-center justify-center 
+                            text-xl md:text-2xl font-bold tibetan-font shadow-md`;
+                        cell.textContent = cellData.letter;
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        cell.dataset.letter = cellData.letter;
+                        cell.onclick = () => handleClick(row, col);
+                        cell.onmouseenter = () => {
+                            highlightGroup(row, col);
+                            // Play sound on hover
+                            if (grid[row][col]) {
+                                playLetterSound(grid[row][col].letter);
+                            }
+                        };
+                        cell.onmouseleave = () => clearHighlight();
+                    } else {
+                        cell.className = 'w-full aspect-square';
+                    }
+                    
+                    gridEl.appendChild(cell);
+                }
+            }
+        }
+        
+        function findConnected(row, col, type, visited = new Set()) {
+            const key = `${row},${col}`;
+            if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return [];
+            if (visited.has(key)) return [];
+            if (!grid[row][col] || grid[row][col].type !== type) return [];
+            
+            visited.add(key);
+            let connected = [{row, col}];
+            
+            connected = connected.concat(findConnected(row - 1, col, type, visited));
+            connected = connected.concat(findConnected(row + 1, col, type, visited));
+            connected = connected.concat(findConnected(row, col - 1, type, visited));
+            connected = connected.concat(findConnected(row, col + 1, type, visited));
+            
+            return connected;
+        }
+        
+        function highlightGroup(row, col) {
+            if (isAnimating || gameOver || !grid[row][col]) return;
+            
+            const connected = findConnected(row, col, grid[row][col].type);
+            if (connected.length < 2) return;
+            
+            connected.forEach(({row, col}) => {
+                const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                if (cell) cell.classList.add('highlighted');
+            });
+            
+            document.getElementById('hint').textContent = 
+                `སེལ་ཆོག་པ། ${connected.length} ཡིག་འབྲུ། | 可消除 ${connected.length} 个字母 (+${calculateScore(connected.length)}分)`;
+        }
+        
+        function clearHighlight() {
+            document.querySelectorAll('.highlighted').forEach(cell => {
+                cell.classList.remove('highlighted');
+            });
+            document.getElementById('hint').textContent = '';
+        }
+        
+        function calculateScore(count) {
+            return count * count * 5;
+        }
+        
+        async function handleClick(row, col) {
+            if (isAnimating || gameOver || !grid[row][col]) return;
+            
+            const connected = findConnected(row, col, grid[row][col].type);
+            if (connected.length < 2) return;
+            
+            // Play sound for the clicked letter
+            playLetterSound(grid[row][col].letter);
+            
+            isAnimating = true;
+            clearHighlight();
+            
+            // Pop animation
+            connected.forEach(({row, col}) => {
+                const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                if (cell) cell.classList.add('popping');
+            });
+            
+            // Play pop sound effect
+            setTimeout(() => playPopSound(), 150);
+            
+            await new Promise(r => setTimeout(r, 300));
+            
+            // Remove cells
+            connected.forEach(({row, col}) => {
+                grid[row][col] = null;
+            });
+            
+            // Add score
+            const points = calculateScore(connected.length);
+            score += points;
+            document.getElementById('score').textContent = score;
+            
+            // Apply gravity
+            applyGravity();
+            
+            // Compact columns
+            compactColumns();
+            
+            await new Promise(r => setTimeout(r, 100));
+            renderGrid();
+            
+            // Add falling animation
+            document.querySelectorAll('.cell').forEach(cell => {
+                if (cell.textContent) {
+                    cell.classList.add('falling');
+                    setTimeout(() => cell.classList.remove('falling'), 300);
+                }
+            });
+            
+            await new Promise(r => setTimeout(r, 300));
+            isAnimating = false;
+            
+            checkGameState();
+        }
+        
+        function applyGravity() {
+            for (let col = 0; col < COLS; col++) {
+                let writeRow = ROWS - 1;
+                for (let row = ROWS - 1; row >= 0; row--) {
+                    if (grid[row][col]) {
+                        if (row !== writeRow) {
+                            grid[writeRow][col] = grid[row][col];
+                            grid[row][col] = null;
+                        }
+                        writeRow--;
+                    }
+                }
+            }
+        }
+        
+        function compactColumns() {
+            let writeCol = 0;
+            for (let col = 0; col < COLS; col++) {
+                if (grid[ROWS - 1][col]) {
+                    if (col !== writeCol) {
+                        for (let row = 0; row < ROWS; row++) {
+                            grid[row][writeCol] = grid[row][col];
+                            grid[row][col] = null;
+                        }
+                    }
+                    writeCol++;
+                }
+            }
+        }
+        
+        function hasValidMoves() {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (grid[row][col]) {
+                        const connected = findConnected(row, col, grid[row][col].type);
+                        if (connected.length >= 2) return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        function countRemaining() {
+            let count = 0;
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (grid[row][col]) count++;
+                }
+            }
+            return count;
+        }
+        
+        function checkGameState() {
+            if (!hasValidMoves()) {
+                gameOver = true;
+                const remaining = countRemaining();
+                const bonus = remaining === 0 ? 2000 : 0;
+                score += bonus;
+                document.getElementById('score').textContent = score;
+                
+                const modal = document.getElementById('modal');
+                const title = document.getElementById('modal-title');
+                const message = document.getElementById('modal-message');
+                const btn = document.getElementById('modal-btn');
+                
+                if (score >= targetScore) {
+                    title.textContent = 'རྒྱལ་ཁ་ཐོབ། 🎉';
+                    message.textContent = `恭喜过关！得分: ${score}${bonus > 0 ? ` (完美奖励 +${bonus})` : ''}`;
+                    btn.textContent = '下一关 / རིམ་པ་རྗེས་མ།';
+                    btn.onclick = nextLevel;
+                } else {
+                    title.textContent = 'རྩེད་མོ་མཇུག་སྒྲིལ། 😢';
+                    message.textContent = `游戏结束！得分: ${score} / 目标: ${targetScore}`;
+                    btn.textContent = '重新开始 / བསྐྱར་དུ་འགོ་བཙུགས།';
+                    btn.onclick = restartGame;
+                }
+                
+                modal.classList.remove('hidden');
+            }
+        }
+        
+        function nextLevel() {
+            level++;
+            targetScore = 1000 + (level - 1) * 500;
+            document.getElementById('level').textContent = level;
+            document.getElementById('target').textContent = targetScore;
+            document.getElementById('modal').classList.add('hidden');
+            gameOver = false;
+            initGame();
+        }
+        
+        function nextAction() {
+            if (score >= targetScore) {
+                nextLevel();
+            } else {
+                restartGame();
+            }
+        }
+        
+        function restartGame() {
+            score = 0;
+            level = 1;
+            targetScore = 1000;
+            gameOver = false;
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('target').textContent = targetScore;
+            document.getElementById('modal').classList.add('hidden');
+            initGame();
+        }
+        
+        // Render clickable letter reference
+        function renderLetterReference() {
+            const container = document.getElementById('letter-reference');
+            container.innerHTML = tibetanLetters.map(letter => {
+                const pron = letterPronunciation[letter];
+                return `<span onclick="playLetterSound('${letter}')" 
+                    class="cursor-pointer hover:bg-purple-500/50 hover:text-white px-2 py-1 rounded-lg transition-all duration-200 hover:scale-110"
+                    title="${pron}">${letter}</span>`;
+            }).join('');
+        }
+        
+        // Initialize game
+        renderLetterReference();
+        initGame();
+    </script>
+</body>
+</html>
